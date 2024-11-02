@@ -24,7 +24,8 @@ namespace Heroes.ReplayParser
             // AutoSelectBug = 12, - Past issue that is no longer applicable
             PreAlphaWipe = 13,
             FileSizeTooLarge = 14,
-            PTRRegion = 15
+            PTRRegion = 15,
+            NotSupported = 16 // Player vs. AI matches are unsupported
         }
 
         public static readonly Dictionary<string, Tuple<double, double, double, double>> MapOffsets = new Dictionary<string, Tuple<double, double, double, double>>
@@ -98,6 +99,9 @@ namespace Heroes.ReplayParser
             else if (replay.Players.Length <= 5)
                 // Custom game with all computer players on the opposing team won't register them as players at all (Noticed at build 34053)
                 return new Tuple<ReplayParseResult, Replay>(ReplayParseResult.ComputerPlayerFound, null);
+            else if (replay.Players.Count(p => p.Name.StartsWith("Player ")) >= 5)
+                // Game had 5 PCs (humans vs. AI) or 9 PCs (player with nine AIs); either way, unsupported.
+                return new Tuple<ReplayParseResult, Replay>(ReplayParseResult.NotSupported, null);
             else if (replay.Players.All(i => !i.IsWinner) || replay.ReplayLength.TotalMinutes < 2)
                 return new Tuple<ReplayParseResult, Replay>(ReplayParseResult.Incomplete, null);
             else if (replay.Timestamp == DateTime.MinValue)
