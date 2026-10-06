@@ -514,7 +514,8 @@ namespace Heroes.ReplayParser.MPQFiles
             }
 
             // Find player BattleTags using Regex
-            replay.Players = Regex.Matches(stringData, @"(\p{L}|\d){3,24}#\d{4,10}[zØ]?").Cast<Match>().Select(i => i.Value.Split('#')).Select(i => new Player
+            // Korean and Chinese names can be 2 characters, everything else is at least 3
+            replay.Players = Regex.Matches(stringData, @"(?:[\p{IsHangulSyllables}\p{IsCJKUnifiedIdeographs}\p{IsCJKUnifiedIdeographsExtensionA}]{2}|(\p{L}|\d){3,24})#\d{4,10}[zØ]?").Cast<Match>().Select(i => i.Value.Split('#')).Select(i => new Player
             {
                 Name = i[0],
                 BattleTag = int.Parse(i[1].Last() == 'z' || i[1].Last() == 'Ø' ? i[1].Substring(0, i[1].Length - 2) : i[1]),
