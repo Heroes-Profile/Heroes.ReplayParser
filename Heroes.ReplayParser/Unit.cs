@@ -22,6 +22,9 @@ namespace Heroes.ReplayParser
         public List<Position> Positions { get; set; } = new List<Position>();
         public List<OwnerChangeEvent> OwnerChangeEvents { get; set; } = new List<OwnerChangeEvent>();
 
+        /// <summary> Gets type changes after birth (hero forms like Medivh's raven or Alexstrasza's dragon, towers dying). Name keeps the type the unit was born as. </summary>
+        public List<UnitTypeChange> TypeChanges { get; set; } = new List<UnitTypeChange>();
+
         public override string ToString()
         {
             return TimeSpanBorn + ": " + PointBorn + ": " + Name + ": " + PlayerControlledBy;
@@ -463,6 +466,7 @@ namespace Heroes.ReplayParser
                     i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.UnitRevivedEvent ||
                     i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.UnitDiedEvent ||
                     i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.UnitOwnerChangeEvent ||
+                    i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.UnitTypeChangeEvent ||
                     i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.UnitPositionsEvent))
                 {
                     switch (unitTrackerEvent.TrackerEventType)
@@ -563,6 +567,12 @@ namespace Heroes.ReplayParser
 
                             if (unitOwnerChanged.PlayerControlledBy != null && UnitOwnerChangeProvidesLocationForOwner.ContainsKey(unitOwnerChanged.Name))
                                 activeHeroUnits[unitOwnerChanged.PlayerControlledBy].Positions.Add(new Position { TimeSpan = ownerChangeEvent.TimeSpanOwnerChanged, Point = unitOwnerChanged.PointBorn });
+                            break;
+
+                        case ReplayTrackerEvents.TrackerEventType.UnitTypeChangeEvent:
+                            // UnitID Index, UnitID Recycle, New Unit Type Name
+                            if (activeUnitsByIndex.TryGetValue((int)unitTrackerEvent.Data.dictionary[0].vInt.Value, out var unitTypeChanged))
+                                unitTypeChanged.TypeChanges.Add(new UnitTypeChange { TimeSpan = unitTrackerEvent.TimeSpan, NewName = unitTrackerEvent.Data.dictionary[2].blobText });
                             break;
 
                         case ReplayTrackerEvents.TrackerEventType.UnitPositionsEvent:
@@ -825,5 +835,11 @@ namespace Heroes.ReplayParser
         public TimeSpan TimeSpanOwnerChanged { get; set; }
         public int? Team { get; set; }
         public Player PlayerNewOwner { get; set; }
+    }
+
+    public class UnitTypeChange
+    {
+        public TimeSpan TimeSpan { get; set; }
+        public string NewName { get; set; }
     }
 }

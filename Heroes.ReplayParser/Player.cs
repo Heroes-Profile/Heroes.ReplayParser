@@ -182,6 +182,11 @@ namespace Heroes.ReplayParser
         public List<Disconnect> Disconnects { get; set; } = new List<Disconnect>();
 
         /// <summary>
+        /// Gets or sets when the player picked up each regen globe.
+        /// </summary>
+        public List<TimeSpan> RegenGlobePickups { get; set; } = new List<TimeSpan>();
+
+        /// <summary>
         /// Gets or sets the player's standard end game score result statistics
         /// </summary>
         public ScoreResult ScoreResult { get; set; } = new ScoreResult();

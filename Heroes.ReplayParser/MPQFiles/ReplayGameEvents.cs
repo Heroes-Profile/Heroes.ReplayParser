@@ -466,9 +466,13 @@ namespace Heroes.ReplayParser.MPQFiles
                             gameEvent.data = new TrackerEventStructure { unsignedInt = bitReader.Read(32) }; // May be missing an offset value
                             break;
                         case GameEventType.CTriggerTargetModeUpdateEvent:
-                            bitReader.Read(16); // m_abilLink
-                            bitReader.Read(5); // m_abilCmdIndex
-                            bitReader.Read(8); // m_state (-128)
+                            gameEvent.data = new TrackerEventStructure
+                            {
+                                array = new[] {
+                                    new TrackerEventStructure { unsignedInt = bitReader.Read(16) }, // m_abilLink
+                                    new TrackerEventStructure { unsignedInt = bitReader.Read(5) }, // m_abilCmdIndex
+                                    new TrackerEventStructure { vInt = bitReader.Read(8) - 128 } } // m_state
+                            };
                             break;
                         case GameEventType.CTriggerSoundtrackDoneEvent:
                             gameEvent.data = new TrackerEventStructure { unsignedInt = bitReader.Read(32) };

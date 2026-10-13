@@ -97,6 +97,9 @@ namespace Heroes.ReplayParser
         /// <summary> Gets when the gates opened, if the replay recorded it. </summary>
         public TimeSpan? GatesOpen { get; set; } = null;
 
+        /// <summary> Gets every mercenary camp capture, including boss camps. </summary>
+        public List<CampCapture> CampCaptures { get; set; } = new List<CampCapture>();
+
         public bool IsGameEventsParsedSuccessfully { get; set; } = false;
         public bool? IsStatisticsParsedSuccessfully { get; set; } = null;
     }
@@ -139,6 +142,17 @@ namespace Heroes.ReplayParser
         public int? Lane { get; set; } = null;
         public Point Position { get; set; } = null;
         public List<Player> KillingPlayers { get; set; } = new List<Player>();
+    }
+
+    public class CampCapture
+    {
+        public TimeSpan TimeSpan { get; set; }
+
+        /// <summary> Gets the capturing team (0 or 1), if known. </summary>
+        public int? Team { get; set; } = null;
+        public string CampType { get; set; }
+        public int CampID { get; set; }
+        public Point Position { get; set; } = null;
     }
 
     public class Disconnect

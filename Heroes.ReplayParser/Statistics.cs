@@ -107,6 +107,7 @@ namespace Heroes.ReplayParser
 
             var playerIDTalentIndexDictionary = new Dictionary<int, int>();
             var townStructureDictionary = new Dictionary<int, StructureDeath>();
+            var campPositionDictionary = new Dictionary<int, Point>();
 
             foreach (var trackerEvent in replay.TrackerEvents.Where(i =>
 				i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.PlayerSetupEvent ||
@@ -327,7 +328,13 @@ namespace Heroes.ReplayParser
                                     }
                                 }
                                 break;
-                            case "JungleCampInit": break;           // {StatGameEvent: {"JungleCampInit", , [{{"CampID"}, 1}], [{{"PositionX"}, 101}, {{"PositionY"}, 74}]}}
+                            case "JungleCampInit":                  // {StatGameEvent: {"JungleCampInit", , [{{"CampID"}, 1}], [{{"PositionX"}, 101}, {{"PositionY"}, 74}]}}
+                                {
+                                    var campID = FirstStatValue(trackerEvent, 2, "CampID");
+                                    if (campID.HasValue)
+                                        campPositionDictionary[(int)campID.Value] = StatPosition(trackerEvent);
+                                }
+                                break;
                             case "PlayerSpawned": break;            // {StatGameEvent: {"PlayerSpawned", [{{"Hero"}, "HeroLeoric"}], [{{"PlayerID"}, 1}], }}
                             case "GatesOpen":                       // {StatGameEvent: {"GatesOpen", , , }}
                                 if (!replay.GatesOpen.HasValue)
@@ -347,7 +354,11 @@ namespace Heroes.ReplayParser
                                 }
                                 break;
                             case "RegenGlobePickedUp":              // {StatGameEvent: {"RegenGlobePickedUp", , [{{"PlayerID"}, 1}], }}
-                                playerIDDictionary[(int)trackerEvent.Data.dictionary[2].optionalData.array[0].dictionary[1].vInt.Value].ScoreResult.RegenGlobes++;
+                                {
+                                    var globePlayer = playerIDDictionary[(int)trackerEvent.Data.dictionary[2].optionalData.array[0].dictionary[1].vInt.Value];
+                                    globePlayer.ScoreResult.RegenGlobes++;
+                                    globePlayer.RegenGlobePickups.Add(trackerEvent.TimeSpan);
+                                }
                                 break;
                             case "ChoGall Cho Spawn Error": break;  // {StatGameEvent: {"ChoGall Cho Spawn Error", , [{{"PlayerID"}, 6}], }}
                             case "ChoGall Gall Spawn Error": break; // {StatGameEvent: {"ChoGall Gall Spawn Error", , [{{"PlayerID"}, 6}], }}
@@ -371,6 +382,21 @@ namespace Heroes.ReplayParser
                                 break;
 
                             case "JungleCampCapture":               // {StatGameEvent: {"JungleCampCapture", [{{"CampType"}, "Boss Camp"}], [{{"CampID"}, 1}], [{{"TeamID"}, 1}]}}
+                                {
+                                    var campID = FirstStatValue(trackerEvent, 2, "CampID");
+                                    if (campID.HasValue)
+                                    {
+                                        var team = FirstStatValue(trackerEvent, 3, "TeamID");
+                                        campPositionDictionary.TryGetValue((int)campID.Value, out var campPosition);
+                                        replay.CampCaptures.Add(new CampCapture {
+                                            TimeSpan = trackerEvent.TimeSpan,
+                                            Team = team == 1 || team == 2 ? (int)team.Value - 1 : (int?)null,
+                                            CampType = FirstStatString(trackerEvent, 1, "CampType"),
+                                            CampID = (int)campID.Value,
+                                            Position = campPosition });
+                                    }
+                                }
+
                                 if (trackerEvent.Data.dictionary[1].optionalData.array[0].dictionary[1].blobText == "Boss Camp")
                                 {
                                     var teamID = trackerEvent.Data.dictionary[3].optionalData.array[0].dictionary[1].vInt.Value - 1;
@@ -1066,7 +1092,7 @@ namespace Heroes.ReplayParser
         // Stat event payloads are lists of {{key}, value} pairs: section 1 strings, 2 ints, 3 fixed.
         // These read by key and yield nothing for anything malformed, so an odd event is skipped
         // instead of failing the whole statistics parse.
-        private static IEnumerable<long> StatValues(TrackerEvent trackerEvent, int section, string key)
+        private static IEnumerable<TrackerEventStructure> StatEntries(TrackerEvent trackerEvent, int section, string key)
         {
             if (trackerEvent.Data?.dictionary == null || !trackerEvent.Data.dictionary.TryGetValue(section, out var data) || data?.optionalData?.array == null)
                 yield break;
@@ -1075,9 +1101,15 @@ namespace Heroes.ReplayParser
                 if (entry?.dictionary != null &&
                     entry.dictionary.TryGetValue(0, out var name) && name?.dictionary != null &&
                     name.dictionary.TryGetValue(0, out var nameText) && nameText?.blobText == key &&
-                    entry.dictionary.TryGetValue(1, out var value) && value?.vInt != null)
-                    yield return value.vInt.Value;
+                    entry.dictionary.TryGetValue(1, out var value) && value != null)
+                    yield return value;
         }
+
+        private static IEnumerable<long> StatValues(TrackerEvent trackerEvent, int section, string key) =>
+            StatEntries(trackerEvent, section, key).Where(i => i.vInt != null).Select(i => i.vInt.Value);
+
+        private static string FirstStatString(TrackerEvent trackerEvent, int section, string key) =>
+            StatEntries(trackerEvent, section, key).Select(i => i.blobText).FirstOrDefault(i => i != null);
 
         private static long? FirstStatValue(TrackerEvent trackerEvent, int section, string key)
         {
