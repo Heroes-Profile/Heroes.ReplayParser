@@ -172,6 +172,17 @@ namespace Heroes.ReplayParser
                     foreach (var player in talentGameEventsDictionary.Keys)
                         player.Talents = talentGameEventsDictionary[player];
                 }
+
+                // Gather disconnects; a join only counts as a rejoin after a leave
+                foreach (var gameEvent in replay.GameEvents
+                    .Where(i => i.player != null && (i.eventType == GameEventType.CGameUserLeaveEvent || i.eventType == GameEventType.CGameUserJoinEvent))
+                    .OrderBy(i => i.ticksElapsed))
+                {
+                    if (gameEvent.eventType == GameEventType.CGameUserLeaveEvent)
+                        gameEvent.player.Disconnects.Add(new Disconnect { TimeSpanLeft = gameEvent.TimeSpan });
+                    else if (gameEvent.player.Disconnects.Count > 0 && !gameEvent.player.Disconnects.Last().TimeSpanRejoined.HasValue)
+                        gameEvent.player.Disconnects.Last().TimeSpanRejoined = gameEvent.TimeSpan;
+                }
                 // Replay Server Battlelobby
                 if (archive.Any(i => i.Filename == ReplayServerBattlelobby.FileName))
                 {
@@ -198,7 +209,7 @@ namespace Heroes.ReplayParser
                         }
                         catch
                         {
-                            replay.IsGameEventsParsedSuccessfully = false;
+                            replay.IsStatisticsParsedSuccessfully = false;
                         }
                 }
 

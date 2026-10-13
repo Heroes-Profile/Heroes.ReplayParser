@@ -88,6 +88,15 @@ namespace Heroes.ReplayParser
         /// <summary> Gets the disabled heroes as attributeIds. </summary>
         public List<string> DisabledHeroes { get; set; } = new List<string>();
 
+        /// <summary> Gets hero deaths, with every killing player and where it happened. </summary>
+        public List<HeroDeath> HeroDeaths { get; set; } = new List<HeroDeath>();
+
+        /// <summary> Gets town structure deaths (forts and keeps), with every killing player. </summary>
+        public List<StructureDeath> StructureDeaths { get; set; } = new List<StructureDeath>();
+
+        /// <summary> Gets when the gates opened, if the replay recorded it. </summary>
+        public TimeSpan? GatesOpen { get; set; } = null;
+
         public bool IsGameEventsParsedSuccessfully { get; set; } = false;
         public bool? IsStatisticsParsedSuccessfully { get; set; } = null;
     }
@@ -110,6 +119,32 @@ namespace Heroes.ReplayParser
         public Player Player { get; set; } = null;
         public TeamObjectiveType TeamObjectiveType { get; set; }
         public int Value { get; set; }
+    }
+
+    public class HeroDeath
+    {
+        public TimeSpan TimeSpan { get; set; }
+        public Player Player { get; set; }
+        public List<Player> KillingPlayers { get; set; } = new List<Player>();
+        public Point Position { get; set; } = null;
+    }
+
+    public class StructureDeath
+    {
+        public TimeSpan TimeSpan { get; set; }
+        public int TownID { get; set; }
+
+        /// <summary> Gets the team that owned the structure (0 or 1), if known. </summary>
+        public int? Team { get; set; } = null;
+        public int? Lane { get; set; } = null;
+        public Point Position { get; set; } = null;
+        public List<Player> KillingPlayers { get; set; } = new List<Player>();
+    }
+
+    public class Disconnect
+    {
+        public TimeSpan TimeSpanLeft { get; set; }
+        public TimeSpan? TimeSpanRejoined { get; set; } = null;
     }
 
     public class DraftPick

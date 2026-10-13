@@ -177,6 +177,11 @@ namespace Heroes.ReplayParser
         public List<Unit> HeroUnits { get; set; } = new List<Unit>();
 
         /// <summary>
+        /// Gets or sets the times the player left the game and, if they came back, rejoined.
+        /// </summary>
+        public List<Disconnect> Disconnects { get; set; } = new List<Disconnect>();
+
+        /// <summary>
         /// Gets or sets the player's standard end game score result statistics
         /// </summary>
         public ScoreResult ScoreResult { get; set; } = new ScoreResult();

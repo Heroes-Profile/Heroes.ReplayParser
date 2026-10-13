@@ -106,6 +106,7 @@ namespace Heroes.ReplayParser
                     Value = -1 });
 
             var playerIDTalentIndexDictionary = new Dictionary<int, int>();
+            var townStructureDictionary = new Dictionary<int, StructureDeath>();
 
             foreach (var trackerEvent in replay.TrackerEvents.Where(i =>
 				i.TrackerEventType == ReplayTrackerEvents.TrackerEventType.PlayerSetupEvent ||
@@ -312,11 +313,39 @@ namespace Heroes.ReplayParser
                                             TrickleXP = (int) trackerEvent.Data.dictionary[3].optionalData.array[4].dictionary[1].vInt.Value });
                                 break;
 
-                            case "TownStructureInit": break;        // {StatGameEvent: {"TownStructureInit", , [{{"TownID"}, 5}, {{"Team"}, 1}, {{"Lane"}, 3}], [{{"PositionX"}, 59}, {{"PositionY"}, 93}]}}
+                            case "TownStructureInit":               // {StatGameEvent: {"TownStructureInit", , [{{"TownID"}, 5}, {{"Team"}, 1}, {{"Lane"}, 3}], [{{"PositionX"}, 59}, {{"PositionY"}, 93}]}}
+                                {
+                                    var townID = FirstStatValue(trackerEvent, 2, "TownID");
+                                    if (townID.HasValue)
+                                    {
+                                        var team = FirstStatValue(trackerEvent, 2, "Team");
+                                        townStructureDictionary[(int)townID.Value] = new StructureDeath {
+                                            TownID = (int)townID.Value,
+                                            Team = team == 1 || team == 2 ? (int)team.Value - 1 : (int?)null,
+                                            Lane = (int?)FirstStatValue(trackerEvent, 2, "Lane"),
+                                            Position = StatPosition(trackerEvent) };
+                                    }
+                                }
+                                break;
                             case "JungleCampInit": break;           // {StatGameEvent: {"JungleCampInit", , [{{"CampID"}, 1}], [{{"PositionX"}, 101}, {{"PositionY"}, 74}]}}
                             case "PlayerSpawned": break;            // {StatGameEvent: {"PlayerSpawned", [{{"Hero"}, "HeroLeoric"}], [{{"PlayerID"}, 1}], }}
-                            case "GatesOpen": break;                // {StatGameEvent: {"GatesOpen", , , }}
-                            case "PlayerDeath": break;              // {StatGameEvent: {"PlayerDeath", , [{{"PlayerID"}, 8}, {{"KillingPlayer"}, 1}, {{"KillingPlayer"}, 2}, {{"KillingPlayer"}, 3}, {{"KillingPlayer"}, 4}, {{"KillingPlayer"}, 5}], [{{"PositionX"}, 130}, {{"PositionY"}, 80}]}}
+                            case "GatesOpen":                       // {StatGameEvent: {"GatesOpen", , , }}
+                                if (!replay.GatesOpen.HasValue)
+                                    replay.GatesOpen = trackerEvent.TimeSpan;
+                                break;
+                            case "PlayerDeath":                     // {StatGameEvent: {"PlayerDeath", , [{{"PlayerID"}, 8}, {{"KillingPlayer"}, 1}, {{"KillingPlayer"}, 2}, {{"KillingPlayer"}, 3}, {{"KillingPlayer"}, 4}, {{"KillingPlayer"}, 5}], [{{"PositionX"}, 130}, {{"PositionY"}, 80}]}}
+                                {
+                                    // Every body that dies counts, so Murky, D.Va (pilot only), Rexxar and The Lost Vikings
+                                    // do not add up to ScoreResult.Deaths, which counts those heroes fractionally
+                                    var victimID = FirstStatValue(trackerEvent, 2, "PlayerID");
+                                    if (victimID.HasValue && playerIDDictionary.TryGetValue((int)victimID.Value, out var victim))
+                                        replay.HeroDeaths.Add(new HeroDeath {
+                                            TimeSpan = trackerEvent.TimeSpan,
+                                            Player = victim,
+                                            KillingPlayers = StatPlayers(trackerEvent, "KillingPlayer", playerIDDictionary),
+                                            Position = StatPosition(trackerEvent) });
+                                }
+                                break;
                             case "RegenGlobePickedUp":              // {StatGameEvent: {"RegenGlobePickedUp", , [{{"PlayerID"}, 1}], }}
                                 playerIDDictionary[(int)trackerEvent.Data.dictionary[2].optionalData.array[0].dictionary[1].vInt.Value].ScoreResult.RegenGlobes++;
                                 break;
@@ -366,7 +395,22 @@ namespace Heroes.ReplayParser
                                     
                                 break;
 
-                            case "TownStructureDeath": break;       // {StatGameEvent: {"TownStructureDeath", , [{{"TownID"}, 8}, {{"KillingPlayer"}, 1}, {{"KillingPlayer"}, 2}, {{"KillingPlayer"}, 3}, {{"KillingPlayer"}, 4}, {{"KillingPlayer"}, 5}], }}
+                            case "TownStructureDeath":              // {StatGameEvent: {"TownStructureDeath", , [{{"TownID"}, 8}, {{"KillingPlayer"}, 1}, {{"KillingPlayer"}, 2}, {{"KillingPlayer"}, 3}, {{"KillingPlayer"}, 4}, {{"KillingPlayer"}, 5}], }}
+                                {
+                                    var townID = FirstStatValue(trackerEvent, 2, "TownID");
+                                    if (townID.HasValue)
+                                    {
+                                        townStructureDictionary.TryGetValue((int)townID.Value, out var town);
+                                        replay.StructureDeaths.Add(new StructureDeath {
+                                            TimeSpan = trackerEvent.TimeSpan,
+                                            TownID = (int)townID.Value,
+                                            Team = town?.Team,
+                                            Lane = town?.Lane,
+                                            Position = town?.Position,
+                                            KillingPlayers = StatPlayers(trackerEvent, "KillingPlayer", playerIDDictionary) });
+                                    }
+                                }
+                                break;
                             case "EndOfGameTimeSpentDead": break;   // {StatGameEvent: {"EndOfGameTimeSpentDead", , [{{"PlayerID"}, 2}], [{{"Time"}, 162}]}}
 
 							case "Pickup Spawned": break;           // {StatGameEvent: {"Pickup Spawned", [{{"Pickup Type"}, "PVERejuvenationPulsePickup"}], , }} - This is for the 'Escape From Braxis' PvE Brawl
@@ -1018,5 +1062,44 @@ namespace Heroes.ReplayParser
             for (var i = 0; i < replay.TeamObjectives.Length; i++)
                 replay.TeamObjectives[i] = replay.TeamObjectives[i].OrderBy(j => j.TimeSpan).ToList();
         }
+
+        // Stat event payloads are lists of {{key}, value} pairs: section 1 strings, 2 ints, 3 fixed.
+        // These read by key and yield nothing for anything malformed, so an odd event is skipped
+        // instead of failing the whole statistics parse.
+        private static IEnumerable<long> StatValues(TrackerEvent trackerEvent, int section, string key)
+        {
+            if (trackerEvent.Data?.dictionary == null || !trackerEvent.Data.dictionary.TryGetValue(section, out var data) || data?.optionalData?.array == null)
+                yield break;
+
+            foreach (var entry in data.optionalData.array)
+                if (entry?.dictionary != null &&
+                    entry.dictionary.TryGetValue(0, out var name) && name?.dictionary != null &&
+                    name.dictionary.TryGetValue(0, out var nameText) && nameText?.blobText == key &&
+                    entry.dictionary.TryGetValue(1, out var value) && value?.vInt != null)
+                    yield return value.vInt.Value;
+        }
+
+        private static long? FirstStatValue(TrackerEvent trackerEvent, int section, string key)
+        {
+            foreach (var value in StatValues(trackerEvent, section, key))
+                return value;
+
+            return null;
+        }
+
+        private static Point StatPosition(TrackerEvent trackerEvent)
+        {
+            var x = FirstStatValue(trackerEvent, 3, "PositionX");
+            var y = FirstStatValue(trackerEvent, 3, "PositionY");
+            return x.HasValue && y.HasValue ? new Point { X = (int)x.Value, Y = (int)y.Value } : null;
+        }
+
+        // Killing player IDs that aren't players (e.g. the AI teams for minions and towers) are dropped
+        private static List<Player> StatPlayers(TrackerEvent trackerEvent, string key, Dictionary<int, Player> playerIDDictionary) =>
+            StatValues(trackerEvent, 2, key)
+                .Where(i => playerIDDictionary.ContainsKey((int)i))
+                .Select(i => playerIDDictionary[(int)i])
+                .Distinct()
+                .ToList();
     }
 }
