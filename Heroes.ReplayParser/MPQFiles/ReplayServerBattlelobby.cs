@@ -465,7 +465,9 @@ namespace Heroes.ReplayParser.MPQFiles
                 else if (battleTagDigits.Count == 0)
                     continue;
 
-                player.BattleTag = int.Parse(string.Join("", battleTagDigits));
+                // A digit run too long for an int is a bad match, not a BattleTag
+                if (int.TryParse(string.Join("", battleTagDigits), out var battleTag))
+                    player.BattleTag = battleTag;
             }
         }
 
